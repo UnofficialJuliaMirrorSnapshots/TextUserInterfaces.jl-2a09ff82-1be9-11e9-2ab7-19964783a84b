@@ -17,6 +17,8 @@ actions to change the focus.
 
  """
 function accept_focus(window::Window)
+    @unpack widget = window
+
     # Check if the window can have focus.
     if window.focusable
         # Move the window to the top and search for a widget that can hold the
@@ -25,6 +27,9 @@ function accept_focus(window::Window)
 
         # Hide the cursor until the a widget request it.
         curs_set(0)
+
+        # Pass the focus to the widget.
+        accept_focus(widget)
 
         return true
     else
@@ -41,96 +46,7 @@ otherwise.
 
 """
 function has_focus(window::Window, widget)
-    @unpack widgets, focus_id = window
-
-    focus_id <= 0 && return false
-    return widgets[focus_id] === widget
-end
-
-"""
-    function focus_on_widget(widget::Widget)
-
-Move focus to the widget `widget`.
-
-"""
-function focus_on_widget(widget::Widget)
-    @unpack parent = widget.common
-
-    # Find the widget on parent list.
-    id = findfirst(x->x == widget, parent.widgets)
-
-    if id == nothing
-        @log error "focus_on_widget" "The widget $(obj_desc(widget)) does not belong to the widgets on window $(parent.id)!"
-        return nothing
-    end
-
-    return focus_on_widget(parent, id)
-end
-
-"""
-    function focus_on_widget(window::Window, id::Integer)
-
-Move focus to the widget ID `id` on window `window`.
-
-"""
-function focus_on_widget(window::Window, id::Integer)
-    @unpack widgets, focus_id = window
-
-    @log verbose "focus_on_widget" "Window $(window.id): Move focus to widget #$id."
-
-    # Release the focus from previous widget.
-    focus_id > 0 && release_focus(widgets[focus_id])
-
-    if (id > 0) && accept_focus(widgets[id])
-        window.focus_id = id
-        sync_cursor(window)
-
-        @log verbose "focus_on_widget" "Window $(window.id): Focus was handled to widget #$id -> $(obj_desc(widgets[id]))."
-
-        return true
-    else
-        window.focus_id = 0
-        sync_cursor(window)
-
-        @log verbose "focus_on_widget" "Window $(window.id): Widget #$id cannot receive focus -> $(obj_desc(widgets[id]))."
-
-        return false
-    end
-end
-
-"""
-    function next_widget(window::Window)
-
-Move the focus of window `window` to the next widget.
-
-"""
-function next_widget(window::Window)
-    @unpack widgets, focus_id = window
-
-    @log verbose "next_widget" "Window $(window.id): Change the focused widget."
-
-    # Release the focus from previous widget.
-    focus_id > 0 && release_focus(widgets[focus_id])
-
-    # Search for the next widget that can handle the focus.
-    for i = focus_id+1:length(widgets)
-        if accept_focus(widgets[i])
-            window.focus_id = i
-            sync_cursor(window)
-
-            @log verbose "next_widget" "Window $(window.id): Focus was handled to widget #$i -> $(obj_desc(widgets[i]))."
-
-            return true
-        end
-    end
-
-    # No more element could accept the focus.
-    window.focus_id = 0
-    sync_cursor(window)
-
-    @log verbose "next_widget" "Window $(window.id): There are no more widgets to receive the focus."
-
-    return false
+    return window.widget === widget
 end
 
 """
@@ -140,54 +56,21 @@ Process the focus on window `window` due to keystroke `k`.
 
 """
 function process_focus(window::Window, k::Keystroke)
-    @unpack widgets, focus_id = window
+    @unpack widget = window
 
-    # If there is any element in focus, ask to process the keystroke.
-    if focus_id > 0
-        # If `process_focus` returns `false`, it means that the widget wants to
-        # release the focus.
-        if process_focus(widgets[focus_id],k)
-            sync_cursor(window)
-            return true
-        end
-    end
-
-    # Otherwise, we must search another widget that can accept the focus.
-    return next_widget(window)
-end
-
-"""
-    function previous_widget(window::Window)
-
-Move the focus of window `window` to the previous widget.
-
-"""
-function previous_widget(window::Window)
-    @unpack widgets, focus_id = window
-
-    @log verbose "previous_widget" "Window $(window.id): Change the focused widget."
-
-    # Release the focus from previous widget.
-    focus_id > 0  && release_focus(widgets[focus_id])
-    focus_id == 0 && (focus_id = length(widgets))
-
-    # Search for the next widget that can handle the focus.
-    for i = focus_id-1:-1:1
-        if accept_focus(widgets[i])
-            window.focus_id = i
-            sync_cursor(window)
-
-            @log verbose "previous_widget" "Window $(window.id): Focus was handled to widget #$i of type $(typeof(widgets[i]))."
+    # If there is any element in the window, then it must be the one with active
+    # focus.
+    if widget != nothing
+        if process_focus(widget,k)
+            if require_cursor(widget)
+                curs_set(1)
+            else
+                curs_set(0)
+            end
 
             return true
         end
     end
-
-    # No more element could accept the focus.
-    window.focus_id = 0
-    sync_cursor(window)
-
-    @log verbose "previous_widget" "Window $(window.id): There are no more widgets to receive the focus."
 
     return false
 end
@@ -201,23 +84,12 @@ copied to the view.
 
 """
 function sync_cursor(window::Window)
-    @unpack widgets, focus_id = window
+    @unpack widget = window
 
-    # If no widget is in focus or if the widget does not request cursor, then
-    # just hide it.
-    if (focus_id <= 0) || !require_cursor(widgets[focus_id])
-        curs_set(0)
-        return nothing
-    else
-        # Show the cursor.
-        curs_set(1)
-
-        # Get the focused widget.
-        widget = widgets[focus_id]
-
-        # Get the cursor position on the `cwin` of the widget.
-        cy,cx = _get_window_cur_pos(widget.cwin)
-        by,bx = _get_window_coord(widget.cwin)
+    if widget != nothing
+        # Get the cursor position on the `buffer` of the widget.
+        cy,cx = _get_window_cur_pos(get_buffer(widget))
+        by,bx = _get_window_coord(get_buffer(widget))
 
         # Compute the coordinates of the cursor with respect to the window.
         y = by + cy
@@ -234,7 +106,7 @@ function sync_cursor(window::Window)
         wmove(window.view, y, x)
 
         # TODO: Limit the cursor position to the edge of the screen.
-
-        return nothing
     end
+
+    return nothing
 end

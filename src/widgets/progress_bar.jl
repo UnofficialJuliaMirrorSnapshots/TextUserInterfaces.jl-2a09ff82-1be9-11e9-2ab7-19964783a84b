@@ -45,7 +45,7 @@ function create_widget(::Type{Val{:progress_bar}}, parent::WidgetParent;
                        value::Integer = 0)
 
     # The height depends on the style.
-    height  = style == :complete ? 2 : 1
+    height = _progress_bar_height(style, border)
 
     # Create the common parameters of the widget.
     common = create_widget_common(parent, top, left, height, width, :absolute,
@@ -53,15 +53,16 @@ function create_widget(::Type{Val{:progress_bar}}, parent::WidgetParent;
 
     # Create the widget.
     widget = WidgetProgressBar(common = common,
+                               border = border,
                                color  = color,
                                value  = value,
                                style  = style)
 
-    # Add to the parent window widget list.
-    push!(parent.widgets, widget)
+    # Add the new widget to the parent widget list.
+    add_widget(parent, widget)
 
     @log info "create_widget" """
-    A progress bar was created in window $(parent.id).
+    A progress bar was created in $(obj_desc(parent)).
         Size        = ($(common.height), $(common.width))
         Coordinate  = ($(common.top), $(common.left))
         Size policy = ($(common.vsize_policy), $(common.hsize_policy))
@@ -184,3 +185,13 @@ function _draw_progress_bar_complete(widget::WidgetProgressBar)
 
     color > 0 && wattroff(buffer, color)
 end
+
+function _progress_bar_height(style::Symbol, border::Bool)
+    height = 1
+
+    border && (height += 2)
+    (style == :complete) && (height += 1)
+
+    return height
+end
+

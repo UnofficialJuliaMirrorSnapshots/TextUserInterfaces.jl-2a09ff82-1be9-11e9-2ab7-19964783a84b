@@ -6,7 +6,8 @@
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #==#
 
-export create_window, destroy_window, destroy_all_windows
+export create_window, create_window_with_container, destroy_window,
+       destroy_all_windows
 
 """
     function create_window(nlines::Integer, ncols::Integer, begin_y::Integer, begin_x::Integer, id::String = ""; bcols::Integer = 0, blines::Integer = 0, border::Bool = true, border_color::Int = -1, title::String = "", title_color::Int = -1)
@@ -91,21 +92,39 @@ function create_window(nlines::Integer, ncols::Integer, begin_y::Integer,
 end
 
 """
+    function create_window_with_container(vargs...; kwargs...)
+
+Create a window with a container as its widget. The arguments and keywords are
+the same ones of the function `create_window`. The container will have the same
+size of the window buffer.
+
+# Return
+
+* The created window.
+* The created container.
+
+"""
+function create_window_with_container(vargs...; kwargs...)
+    win = create_window(vargs...; kwargs...)
+    con = create_widget(Val{:container}, win)
+    return win, con
+end
+
+"""
     function destroy_window(win::Window)
 
 Destroy the window `win`.
 
 """
 function destroy_window(win::Window)
-    @log info "destroy_window" "Window $(win.id) and its $(length(win.widgets)) widgets will be destroyed."
+    @log info "destroy_window" "$(obj_desc(win)) will be destroyed."
     @log_ident 1
 
-    win.focus_id = 0
-
-    # Destroy all widgets.
-    for widget in win.widgets
+    # Destroy the widget.
+    if win.widget != nothing
         # In this case, we do not need to refresh the window.
-        destroy_widget(widget; refresh = false)
+        destroy_widget(win.widget; refresh = false)
+        win.widget = nothing
     end
 
     # Delete everything.

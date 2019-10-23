@@ -10,8 +10,8 @@
 #                                API functions
 ################################################################################
 
-export accept_focus, create_widget, destroy_widget, request_update, redraw,
-       release_focus, update
+export accept_focus, create_widget, destroy_widget, request_update,
+       request_focus, redraw, release_focus, update
 
 """
     function accept_focus(widget)
@@ -51,9 +51,8 @@ function destroy_widget(widget; refresh::Bool = true)
     delwin(buffer)
     buffer = Ptr{WINDOW}(0)
 
-    # Remove the widget from the parent window.
-    idx = findall(x->x == widget, parent.widgets)
-    deleteat!(parent.widgets, idx)
+    # Remove the widget from the parent.
+    remove_widget(parent, widget)
 
     @log info "destroy_widget" "Widget $widget_desc destroyed."
 
@@ -85,7 +84,7 @@ get_height(widget) = widget.common.height
 Return the width of widget `widget`.
 
 """
-get_widgth(widget) = widget.common.width
+get_width(widget) = widget.common.width
 
 """
     function process_focus(widget, k::Keystroke)
@@ -98,12 +97,32 @@ to process the focus. Otherwise, it must return `true`.
 process_focus(widget,k::Keystroke) = return false
 
 """
+    function request_focus(widget)
+
+Request to focus to the widget `widget`.
+
+"""
+function request_focus(widget)
+    @unpack common = widget
+    @unpack parent = common
+
+    # Only request focus if the widget can accept the focus.
+    request_focus(parent, widget)
+
+    return nothing
+end
+
+"""
     function request_update(widget)
 
 Request update of the widget `widget`.
 
 """
-request_update(widget) = widget.common.update_needed = true
+function request_update(widget)
+    widget.common.update_needed = true
+    request_update(widget.common.parent)
+    return nothing
+end
 
 """
     function redraw(widget)
